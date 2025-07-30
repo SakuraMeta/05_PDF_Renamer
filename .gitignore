@@ -1,0 +1,16 @@
+# PyInstaller files
+/dist/
+/build/
+*.spec
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Log and data folders
+/log_output/
+/pdf_input/
+/pdf_output/
+
+# IDE files
+.vscode/
