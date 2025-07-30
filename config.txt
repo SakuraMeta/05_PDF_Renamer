@@ -1,0 +1,15 @@
+[Paths]
+input_dir = pdf_input
+output_dir = pdf_output
+log_dir = log_output
+
+[OCR]
+# PDFの左上を原点(0,0)とする座標 (単位: point)
+x = 50
+y = 50
+width = 200
+height = 50
+
+[Filter]
+# 抽出する数字の桁数 (0を指定すると桁数チェックを無効化)
+digits = 0
