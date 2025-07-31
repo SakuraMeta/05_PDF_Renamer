@@ -4,9 +4,15 @@ import datetime
 import configparser
 import re
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import filedialog, messagebox, simpledialog
+from tkinter import ttk
 import fitz  # PyMuPDF
 from PIL import Image, ImageTk
+import pytesseract
+
+# Tell pytesseract where to find the Tesseract executable
+# This makes the app more self-contained
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 class PdfRenamerApp:
     def __init__(self, root):
@@ -57,10 +63,11 @@ class PdfRenamerApp:
         self.ocr_height = self.config.getint('OCR', 'height', fallback=50)
         self.ocr_rect = fitz.Rect(self.ocr_x, self.ocr_y, self.ocr_x + self.ocr_width, self.ocr_y + self.ocr_height)
         
-        self.filter_digits = self.config.getint('Filter', 'digits', fallback=0)
+
 
     def setup_directories(self):
-        for dir_path in [self.input_dir, self.output_dir, self.log_dir]:
+        self.ocr_image_dir = 'ocr_get_image'
+        for dir_path in [self.input_dir, self.output_dir, self.log_dir, self.ocr_image_dir]:
             if not os.path.exists(dir_path):
                 os.makedirs(dir_path)
 
@@ -134,6 +141,9 @@ class PdfRenamerApp:
         self.pdf_path = os.path.join(self.input_dir, original_filename)
 
         try:
+            if hasattr(self, 'doc') and self.doc:
+                self.doc.close() # Close previous document if it exists
+
             self.doc = fitz.open(self.pdf_path)
             page = self.doc.load_page(0)
             self.page_rect = page.rect
@@ -186,15 +196,52 @@ class PdfRenamerApp:
         self.current_rect_id = self.canvas.create_rectangle(x0, y0, x1, y1, outline="red", width=2)
 
     def extract_text_from_rect(self):
-        page = self.doc.load_page(0)
-        text = page.get_text(clip=self.ocr_rect, sort=True).strip()
-        numbers = re.findall(r'\d+', text)
-        extracted_text = "".join(numbers)
+        if not self.doc or self.ocr_rect is None:
+            return
 
-        if self.filter_digits > 0 and len(extracted_text) != self.filter_digits:
-            self.filename_var.set(f"(桁数エラー: {extracted_text})")
+        page = self.doc.load_page(0)
+
+        # 1. Get the image of the specified rectangle (clip)
+        pix = page.get_pixmap(clip=self.ocr_rect, dpi=300)
+        pil_img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+
+        # --- Save the OCR image for debugging ---
+        try:
+            if self.pdf_path:
+                base_name = os.path.basename(self.pdf_path)
+                name_without_ext, _ = os.path.splitext(base_name)
+                image_filename = f"{name_without_ext}.png"
+                save_path = os.path.join(self.ocr_image_dir, image_filename)
+                pil_img.save(save_path)
+        except Exception as e:
+            print(f"Could not save OCR debug image: {e}")
+
+        # 2. Use Tesseract to extract text from the image
+        try:
+            # Specify language as English for better number recognition
+            extracted_text = pytesseract.image_to_string(pil_img, lang='eng')
+        except pytesseract.TesseractNotFoundError:
+            messagebox.showerror("Error", "Tesseract is not installed or not in your PATH. Please install it to use the OCR feature.")
+            self.filename_var.set("")
+            return
+        except Exception as e:
+            messagebox.showerror("OCR Error", f"An error occurred during OCR: {e}")
+            self.filename_var.set("")
+            return
+
+        # 3. Search for the specific pattern (4-4-3-1 digits)
+        # Pattern: 4 digits, hyphen, 4 digits, hyphen, 3 digits, hyphen, 1 digit
+        pattern = re.compile(r'\d{4}-\d{4}-\d{3}-\d{1}')
+        match = pattern.search(extracted_text)
+
+        # 4. If pattern is found, format it and set the filename
+        if match:
+            # Get the matched string and remove hyphens
+            number_string = match.group(0).replace('-', '')
+            self.filename_var.set(number_string)
         else:
-            self.filename_var.set(extracted_text)
+            # If no match is found, set filename to empty
+            self.filename_var.set("")
 
     def on_ok_click(self):
         if self.selection_mode:
