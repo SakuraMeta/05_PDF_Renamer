@@ -269,7 +269,6 @@ class PdfRenamerApp:
                 return
 
         try:
-            self.doc.close() # Close the document before copying
             shutil.copy2(self.pdf_path, new_path)
             self.write_log(new_filename_base)
             self.current_file_index += 1
