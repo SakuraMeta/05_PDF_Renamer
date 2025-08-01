@@ -205,21 +205,29 @@ class PdfRenamerApp:
         pix = page.get_pixmap(clip=self.ocr_rect, dpi=300)
         pil_img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
 
-        # --- Save the OCR image for debugging ---
+        # --- Image Binarization (Black and White) ---
+        # Convert to grayscale
+        gray_img = pil_img.convert('L')
+        # Apply thresholding to get a black and white image.
+        # Pixels with a value below the threshold become black (0), others white (255).
+        threshold = 200 
+        bw_img = gray_img.point(lambda x: 0 if x < threshold else 255, '1')
+
+        # --- Save the processed OCR image for debugging ---
         try:
             if self.pdf_path:
                 base_name = os.path.basename(self.pdf_path)
                 name_without_ext, _ = os.path.splitext(base_name)
                 image_filename = f"{name_without_ext}.png"
                 save_path = os.path.join(self.ocr_image_dir, image_filename)
-                pil_img.save(save_path)
+                bw_img.save(save_path) # Save the binarized image
         except Exception as e:
             print(f"Could not save OCR debug image: {e}")
 
-        # 2. Use Tesseract to extract text from the image
+        # 2. Use Tesseract to extract text from the processed image
         try:
             # Specify language as English for better number recognition
-            extracted_text = pytesseract.image_to_string(pil_img, lang='eng')
+            extracted_text = pytesseract.image_to_string(bw_img, lang='eng', config='--psm 6') # Use the binarized image
         except pytesseract.TesseractNotFoundError:
             messagebox.showerror("Error", "Tesseract is not installed or not in your PATH. Please install it to use the OCR feature.")
             self.filename_var.set("")
